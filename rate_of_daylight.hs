@@ -1,7 +1,11 @@
 import Data.Time.Clock.POSIX
 
+-- this is a horrible function but it works!!!
+calc_julian_date :: Double -> Double -> Double -> Double -> Double
+calc_julian_date y m d ut = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5 + ut/24.0
+
 calc_n_centuries :: Double -> Double -> Double
-calc_n_centuries jd ut = (jd + ut/24 - 2451545.0) / 36525.0
+calc_n_centuries jd ut = (jd - 2451545.0) / 36525.0
 
 calc_mean_longitude :: Double -> Double
 calc_mean_longitude t = 280.460 + 36000.770 * t
@@ -27,7 +31,7 @@ calc_declination epsilon lambda = asin (sin epsilon * sin lambda)
 calc_semidiameter :: Double -> Double
 calc_semidiameter g = 0.267 / (1 - 0.017 * cos g)
 
+main :: IO ()
 main = do
     print (calc_n_centuries 10.0 10.0)
-    let test  = ((round . (* 1000)) <$> getPOSIXTime)
-    print (test)
+    let test = calc_julian_date 2021 1 1 1
