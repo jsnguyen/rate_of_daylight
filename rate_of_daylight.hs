@@ -1,14 +1,17 @@
-import Data.Time.Clock.POSIX
 import Data.Fixed
-import Debug.Trace
+import Data.List
 
 toRadians = pi/180
 toDegrees = 180/pi
 toHours = 24/360
 
+fst' (a, _, _) = a
+snd' (_, a, _) = a
+thd' (_, _, a) = a
+
 -- this is a horrible function but it works!!!
-calc_julian_date :: Double -> Double -> Double -> Double
-calc_julian_date y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5
+calcJulianDate :: Double -> Double -> Double -> Double
+calcJulianDate y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5
 
 calc_n_centuries :: Double -> Double -> Double
 calc_n_centuries jd ut = (jd + ut/24 - 2451545.0) / 36525.0
@@ -63,9 +66,9 @@ subUntil var gtVal untilVal =
         then subUntil (var - untilVal) gtVal untilVal
         else var
 
-iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double
-iterativeSolverSunrise ut0 h latitude longitude = do
-    let tup = calcSolarGHADec ut0
+iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double -> Double
+iterativeSolverSunrise jd ut0 h latitude longitude = do
+    let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
     let tha = calcUT0HourAngle h latitude dec
@@ -76,11 +79,11 @@ iterativeSolverSunrise ut0 h latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunrise utCorr h latitude longitude
+        else iterativeSolverSunrise jd utCorr h latitude longitude
 
-iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double
-iterativeSolverSunset  ut0 h latitude longitude = do
-    let tup = calcSolarGHADec ut0
+iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double -> Double
+iterativeSolverSunset jd ut0 h latitude longitude = do
+    let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
     let tha = calcUT0HourAngle h latitude dec
@@ -91,14 +94,13 @@ iterativeSolverSunset  ut0 h latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunset utCorr h latitude longitude
+        else iterativeSolverSunset jd utCorr h latitude longitude
 
 calcTrueAltitude :: Double -> Double
 calcTrueAltitude h0 = -50/60 - 0.0353 * sqrt h0
 
-calcSolarGHADec :: Double -> (Double, Double)
-calcSolarGHADec ut = do
-    let jd = calc_julian_date 2021 7 1
+calcSolarGHADec :: Double -> Double -> (Double, Double)
+calcSolarGHADec jd ut = do
     let t = calc_n_centuries jd ut
     let l = calc_mean_longitude t
     let g = calc_mean_anomaly t
@@ -112,17 +114,22 @@ calcSolarGHADec ut = do
 
     (gha, dec)
 
-main = do
-
+calcDeltaTime :: Double -> Double
+calcDeltaTime jd = do
     let h = calcTrueAltitude 0
     let latitude = 51.48257659
     let longitude = 0
-
     let ut0 = 12
-    putStrLn ("Running iterator...")
-    let sunriseTime = iterativeSolverSunrise ut0 h latitude longitude
-    let sunsetTime = iterativeSolverSunset ut0 h latitude longitude
+    let sunriseTime = iterativeSolverSunrise jd ut0 h latitude longitude
+    let sunsetTime = iterativeSolverSunset jd ut0 h latitude longitude
+    sunsetTime-sunriseTime
 
-    print ("Sunrise",sunriseTime)
-    print ("Sunset",sunsetTime)
-    putStrLn ("Done!")
+calcDerivative :: Double -> Double -> Double -> Double
+calcDerivative a b width = (a - b) / 2
+
+main = do
+    let jd = calcJulianDate 2021 1 1
+    let dates = [jd,jd+1..jd+365]
+    let res = map calcDeltaTime dates
+    writeFile "data.txt" . intercalate "\n" . map show $ res
+    putStrLn ("Done. Wrote data.txt!")
