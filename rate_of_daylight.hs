@@ -124,12 +124,29 @@ calcDeltaTime jd = do
     let sunsetTime = iterativeSolverSunset jd ut0 h latitude longitude
     sunsetTime-sunriseTime
 
-calcDerivative :: Double -> Double -> Double -> Double
-calcDerivative a b width = (a - b) / 2
+calcDerivative :: Int -> (Double, Double) -> Double
+calcDerivative width doublet = (snd doublet - fst doublet) / (fromIntegral width)
+
+extractDoublet :: [Double] -> Int -> (Double, Double)
+extractDoublet arr i = (arr!!i, arr!!(i+1))
 
 main = do
+    let stepSize = 1 
     let jd = calcJulianDate 2021 1 1
-    let dates = [jd,jd+1..jd+365]
-    let res = map calcDeltaTime dates
-    writeFile "data.txt" . intercalate "\n" . map show $ res
-    putStrLn ("Done. Wrote data.txt!")
+    let dates = [jd,jd+(fromIntegral stepSize)..jd+365]
+
+    putStrLn "Calculating delta sunrise sunset times..."
+    let deltaTimes = map calcDeltaTime dates
+
+    putStrLn "Calculating derivatives..."
+    -- minus 1 for zero index and minus 1 for derivative endpoint
+    let indicies = [0,stepSize..((length deltaTimes) - 1 - 1)]
+    let res = map (extractDoublet deltaTimes) indicies
+    let derivatives = map (calcDerivative stepSize) res
+
+    writeFile "delta_times.txt" . intercalate "\n" . map show $ deltaTimes
+    writeFile "derivatives.txt" . intercalate "\n" . map show $ derivatives
+
+    putStrLn "Wrote delta_times.txt and derivatives.txt!"
+    putStrLn "Done!"
+
