@@ -117,7 +117,7 @@ calcSolarGHADec jd ut = do
 calcDeltaTime :: Double -> Double
 calcDeltaTime jd = do
     let h = calcTrueAltitude 0
-    let latitude = 51.48257659
+    let latitude = 37.779379
     let longitude = 0
     let ut0 = 12
     let sunriseTime = iterativeSolverSunrise jd ut0 h latitude longitude
@@ -142,7 +142,7 @@ main = do
     -- minus 1 for zero index and minus 1 for derivative endpoint
     let indicies = [0,stepSize..((length deltaTimes) - 1 - 1)]
     let res = map (extractDoublet deltaTimes) indicies
-    let derivatives = map (calcDerivative stepSize) res
+    let derivatives = map (*60) (map (calcDerivative stepSize ) res)
 
     writeFile "delta_times.txt" . intercalate "\n" . map show $ deltaTimes
     writeFile "derivatives.txt" . intercalate "\n" . map show $ derivatives
