@@ -117,8 +117,8 @@ calcSolarGHADec jd ut = do
 calcDeltaTime :: Double -> Double
 calcDeltaTime jd = do
     let h = calcTrueAltitude 0
-    let latitude = 37.779379
-    let longitude = 0
+    let latitude = 30
+    let longitude = 70
     let ut0 = 12
     let sunriseTime = iterativeSolverSunrise jd ut0 h latitude longitude
     let sunsetTime = iterativeSolverSunset jd ut0 h latitude longitude
