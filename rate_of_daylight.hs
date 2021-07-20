@@ -65,12 +65,11 @@ subUntil var gtVal untilVal =
         then subUntil (var - untilVal) gtVal untilVal
         else var
 
-iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double
-iterativeSolverSunrise jd ut0 latitude longitude = do
+iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double -> Double
+iterativeSolverSunrise jd h ut0 latitude longitude = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
-    let h = calcTrueAltitude latitude longitude dec gha
     let tha = calcUT0HourAngle h latitude dec
     let ut = calcSunrise ut0 gha longitude tha
     let utCorr | ut < 0   = addUntil ut 0 24
@@ -79,14 +78,13 @@ iterativeSolverSunrise jd ut0 latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunrise jd utCorr latitude longitude
+        else iterativeSolverSunrise jd h utCorr latitude longitude
 
-iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double
-iterativeSolverSunset jd ut0 latitude longitude = do
+iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double -> Double
+iterativeSolverSunset jd h ut0 latitude longitude = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
-    let h = calcTrueAltitude latitude longitude dec gha
     let tha = calcUT0HourAngle h latitude dec
     let ut = calcSunset ut0 gha longitude tha
     let utCorr | ut < 0   = addUntil ut 0 24
@@ -95,13 +93,10 @@ iterativeSolverSunset jd ut0 latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunset jd utCorr latitude longitude
+        else iterativeSolverSunset jd h utCorr latitude longitude
 
-calcTrueAltitudeSimple :: Double -> Double
-calcTrueAltitudeSimple h0 = -50/60 - 0.0353 * sqrt h0
-
-calcTrueAltitude :: Double -> Double -> Double -> Double -> Double
-calcTrueAltitude latitude longitude dec gha = toDegrees * asin (sin (latitude*toRadians) * sin (dec*toRadians) + cos (latitude*toRadians) * cos (dec*toRadians) * cos ((gha*hoursToDegrees+longitude)*toRadians))
+calcTrueAltitude :: Double -> Double
+calcTrueAltitude h0 = -50/60 - 0.0353 * sqrt h0
 
 calcSolarGHADec :: Double -> Double -> (Double, Double)
 calcSolarGHADec jd ut = do
@@ -117,11 +112,11 @@ calcSolarGHADec jd ut = do
 
     (gha, dec)
 
-calcDeltaTime :: Double -> Double -> Double -> Double
-calcDeltaTime latitude longitude jd = do
+calcDeltaTime :: Double -> Double -> Double -> Double -> Double
+calcDeltaTime h latitude longitude jd = do
     let ut0 = 12
-    let sunriseTime = iterativeSolverSunrise jd ut0 latitude longitude
-    let sunsetTime = iterativeSolverSunset jd ut0 latitude longitude
+    let sunriseTime = iterativeSolverSunrise jd h ut0 latitude longitude
+    let sunsetTime = iterativeSolverSunset jd h ut0 latitude longitude
     sunsetTime-sunriseTime
 
 calcDerivative :: Int -> (Double, Double) -> Double
@@ -135,8 +130,12 @@ main = do
     let jd = calcJulianDate 2021 1 1
     let dates = [jd,jd+(fromIntegral stepSize)..jd+365]
 
+    let h = calcTrueAltitude 0
+    let latitude = 40
+    let longitude = 0
+
     putStrLn "Calculating delta sunrise sunset times..."
-    let deltaTimes = map (calcDeltaTime 0 0) dates
+    let deltaTimes = map (calcDeltaTime h latitude longitude) dates
 
     putStrLn "Calculating derivatives..."
     -- minus 1 for zero index and minus 1 for derivative endpoint
