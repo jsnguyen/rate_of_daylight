@@ -1,9 +1,11 @@
 import Data.Fixed
 import Data.List
+import Debug.Trace
 
 toRadians = pi/180
 toDegrees = 180/pi
 toHours = 24/360
+hoursToDegrees = 360/24
 
 fst' (a, _, _) = a
 snd' (_, a, _) = a
@@ -13,32 +15,29 @@ thd' (_, _, a) = a
 calcJulianDate :: Double -> Double -> Double -> Double
 calcJulianDate y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5
 
-calc_n_centuries :: Double -> Double -> Double
-calc_n_centuries jd ut = (jd + ut/24 - 2451545.0) / 36525.0
+calcNCenturies :: Double -> Double -> Double
+calcNCenturies jd ut = (jd + ut/24 - 2451545.0) / 36525.0
 
-calc_mean_longitude :: Double -> Double
-calc_mean_longitude t = (280.460 + 36000.770 * t) `mod'` 360
+calcMeanLongitude :: Double -> Double
+calcMeanLongitude t = (280.460 + 36000.770 * t) `mod'` 360
 
-calc_mean_anomaly :: Double -> Double
-calc_mean_anomaly t = (357.528 + 35999.050 * t) `mod'` 360
+calcMeanAnomaly :: Double -> Double
+calcMeanAnomaly t = (357.528 + 35999.050 * t) `mod'` 360
 
-calc_ecliptic_longitude :: Double -> Double -> Double
-calc_ecliptic_longitude l g = l + 1.915 * sin (g*toRadians) + 0.020 * sin (2*g*toRadians)
+calcEclipticLongitude :: Double -> Double -> Double
+calcEclipticLongitude l g = l + 1.915 * sin (g*toRadians) + 0.020 * sin (2*g*toRadians)
 
-calc_obliquity_of_ecliptic :: Double -> Double
-calc_obliquity_of_ecliptic t = 23.4393 - 0.01300 * t
+calcObliquityOfEcliptic :: Double -> Double
+calcObliquityOfEcliptic t = 23.4393 - 0.01300 * t
 
-calc_equation_of_time :: Double -> Double -> Double
-calc_equation_of_time g lambda = -1.915 * sin (g*toRadians) - 0.020 * sin (2*g*toRadians) + 2.466 * sin (2*lambda*toRadians) - 0.053 * sin (4*lambda*toRadians)
+calcEquationOfTime :: Double -> Double -> Double
+calcEquationOfTime g lambda = -1.915 * sin (g*toRadians) - 0.020 * sin (2*g*toRadians) + 2.466 * sin (2*lambda*toRadians) - 0.053 * sin (4*lambda*toRadians)
 
-calc_greenwich_hour_angle :: Double -> Double -> Double
-calc_greenwich_hour_angle ut e = ut - 12 + e*toHours
+calcGreenwichHourAngle :: Double -> Double -> Double
+calcGreenwichHourAngle ut e = ut - 12 + e*toHours
 
-calc_declination :: Double -> Double -> Double
-calc_declination epsilon lambda = toDegrees * asin (sin (epsilon*toRadians) * sin (lambda*toRadians))
-
-calc_semidiameter :: Double -> Double
-calc_semidiameter g = 0.267 / (1 - 0.017 * cos (g*toRadians))
+calcDeclination :: Double -> Double -> Double
+calcDeclination epsilon lambda = toDegrees * asin (sin (epsilon*toRadians) * sin (lambda*toRadians))
 
 calcSunrise :: Double -> Double -> Double -> Double -> Double
 calcSunrise ut0 gha longitude tha = ut0 - (gha + toHours*longitude + tha)
@@ -66,11 +65,12 @@ subUntil var gtVal untilVal =
         then subUntil (var - untilVal) gtVal untilVal
         else var
 
-iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double -> Double
-iterativeSolverSunrise jd ut0 h latitude longitude = do
+iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double
+iterativeSolverSunrise jd ut0 latitude longitude = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
+    let h = calcTrueAltitude latitude longitude dec gha
     let tha = calcUT0HourAngle h latitude dec
     let ut = calcSunrise ut0 gha longitude tha
     let utCorr | ut < 0   = addUntil ut 0 24
@@ -79,13 +79,14 @@ iterativeSolverSunrise jd ut0 h latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunrise jd utCorr h latitude longitude
+        else iterativeSolverSunrise jd utCorr latitude longitude
 
-iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double -> Double
-iterativeSolverSunset jd ut0 h latitude longitude = do
+iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double
+iterativeSolverSunset jd ut0 latitude longitude = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
+    let h = calcTrueAltitude latitude longitude dec gha
     let tha = calcUT0HourAngle h latitude dec
     let ut = calcSunset ut0 gha longitude tha
     let utCorr | ut < 0   = addUntil ut 0 24
@@ -94,34 +95,33 @@ iterativeSolverSunset jd ut0 h latitude longitude = do
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunset jd utCorr h latitude longitude
+        else iterativeSolverSunset jd utCorr latitude longitude
 
-calcTrueAltitude :: Double -> Double
-calcTrueAltitude h0 = -50/60 - 0.0353 * sqrt h0
+calcTrueAltitudeSimple :: Double -> Double
+calcTrueAltitudeSimple h0 = -50/60 - 0.0353 * sqrt h0
+
+calcTrueAltitude :: Double -> Double -> Double -> Double -> Double
+calcTrueAltitude latitude longitude dec gha = toDegrees * asin (sin (latitude*toRadians) * sin (dec*toRadians) + cos (latitude*toRadians) * cos (dec*toRadians) * cos ((gha*hoursToDegrees+longitude)*toRadians))
 
 calcSolarGHADec :: Double -> Double -> (Double, Double)
 calcSolarGHADec jd ut = do
-    let t = calc_n_centuries jd ut
-    let l = calc_mean_longitude t
-    let g = calc_mean_anomaly t
-    let lambda = calc_ecliptic_longitude l g
-    let epsilon = calc_obliquity_of_ecliptic t
+    let t = calcNCenturies jd ut
+    let l = calcMeanLongitude t
+    let g = calcMeanAnomaly t
+    let lambda = calcEclipticLongitude l g
+    let epsilon = calcObliquityOfEcliptic t
 
-    let e = calc_equation_of_time g lambda
-    let gha = calc_greenwich_hour_angle ut e
-    let dec = calc_declination epsilon lambda
-    let sd = calc_semidiameter g
+    let e = calcEquationOfTime g lambda
+    let gha = calcGreenwichHourAngle ut e
+    let dec = calcDeclination epsilon lambda
 
     (gha, dec)
 
-calcDeltaTime :: Double -> Double
-calcDeltaTime jd = do
-    let h = calcTrueAltitude 0
-    let latitude = 30
-    let longitude = 70
+calcDeltaTime :: Double -> Double -> Double -> Double
+calcDeltaTime latitude longitude jd = do
     let ut0 = 12
-    let sunriseTime = iterativeSolverSunrise jd ut0 h latitude longitude
-    let sunsetTime = iterativeSolverSunset jd ut0 h latitude longitude
+    let sunriseTime = iterativeSolverSunrise jd ut0 latitude longitude
+    let sunsetTime = iterativeSolverSunset jd ut0 latitude longitude
     sunsetTime-sunriseTime
 
 calcDerivative :: Int -> (Double, Double) -> Double
@@ -136,7 +136,7 @@ main = do
     let dates = [jd,jd+(fromIntegral stepSize)..jd+365]
 
     putStrLn "Calculating delta sunrise sunset times..."
-    let deltaTimes = map calcDeltaTime dates
+    let deltaTimes = map (calcDeltaTime 0 0) dates
 
     putStrLn "Calculating derivatives..."
     -- minus 1 for zero index and minus 1 for derivative endpoint
