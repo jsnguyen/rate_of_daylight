@@ -6,7 +6,7 @@ import Data.Fixed
 import Data.List
 
 degToRad = pi/180
-degToRad = 180/pi
+radToDeg = 180/pi
 degToHr = 24/360
 
 -- Gets the Julian day, not taking into account the specific time of day
@@ -18,11 +18,9 @@ calcJulianDay y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floo
 calcDecCenturies :: Double -> Double -> Double
 calcDecCenturies jd ut = (jd + ut/24 - 2451545.0) / 36525.0
 
-
 -- #################################
 -- APPROXIMATE EPHEMERIS FOR THE SUN
 -- #################################
-
 
 calcMeanLongitude :: Double -> Double
 calcMeanLongitude t = (280.460 + 36000.770 * t) `mod'` 360
@@ -43,7 +41,7 @@ calcGreenwichHourAngle :: Double -> Double -> Double
 calcGreenwichHourAngle ut e = ut - 12 + e*degToHr
 
 calcDeclination :: Double -> Double -> Double
-calcDeclination epsilon lambda = degToRad * asin (sin (epsilon*degToRad) * sin (lambda*degToRad))
+calcDeclination epsilon lambda = radToDeg * asin (sin (epsilon*degToRad) * sin (lambda*degToRad))
 
 -- #################################
 -- END #############################
@@ -63,7 +61,7 @@ calcUT0HourAngle :: Double -> Double -> Double -> Double
 calcUT0HourAngle h lat dec
     | tha' > 1  = 0
     | tha' < -1 = 12
-    | otherwise = degToHr * degToRad * acos tha'
+    | otherwise = degToHr * radToDeg * acos tha'
     where
         tha' = (sin (h*degToRad) - sin (lat*degToRad) * sin (dec*degToRad)) / (cos (lat*degToRad) * cos (dec*degToRad))
 
