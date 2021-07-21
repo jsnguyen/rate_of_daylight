@@ -1,22 +1,28 @@
+-- Most everythign is in units of degrees and converted to radians when needed
+-- Hour angles are in units of hours
+-- Most equations taken from "Explanatory Supplement to the Astronomical Almanac, 3rd Ed.", pg. 511-513
+
 import Data.Fixed
 import Data.List
-import Debug.Trace
 
-toRadians = pi/180
-toDegrees = 180/pi
-toHours = 24/360
-hoursToDegrees = 360/24
+degToRad = pi/180
+degToRad = 180/pi
+degToHr = 24/360
 
-fst' (a, _, _) = a
-snd' (_, a, _) = a
-thd' (_, _, a) = a
+-- Gets the Julian day, not taking into account the specific time of day
+-- This is a horrible looking function but it works!!!
+calcJulianDay :: Double -> Double -> Double -> Double
+calcJulianDay y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5
 
--- this is a horrible function but it works!!!
-calcJulianDate :: Double -> Double -> Double -> Double
-calcJulianDate y m d = 367 * y - fromIntegral (floor (7 * (y + fromIntegral (floor ( (m + 9) / 12 )) ) / 4 )) - fromIntegral (floor ( 3 * ( fromIntegral (floor ( ( y + (m - 9) / 7 ) / 100 ) + 1) / 4))) + fromIntegral (floor (275 * m / 9 )) + d + 1721028.5
+-- Calculate the number of decimal centuries from the Julian date and UT
+calcDecCenturies :: Double -> Double -> Double
+calcDecCenturies jd ut = (jd + ut/24 - 2451545.0) / 36525.0
 
-calcNCenturies :: Double -> Double -> Double
-calcNCenturies jd ut = (jd + ut/24 - 2451545.0) / 36525.0
+
+-- #################################
+-- APPROXIMATE EPHEMERIS FOR THE SUN
+-- #################################
+
 
 calcMeanLongitude :: Double -> Double
 calcMeanLongitude t = (280.460 + 36000.770 * t) `mod'` 360
@@ -25,82 +31,98 @@ calcMeanAnomaly :: Double -> Double
 calcMeanAnomaly t = (357.528 + 35999.050 * t) `mod'` 360
 
 calcEclipticLongitude :: Double -> Double -> Double
-calcEclipticLongitude l g = l + 1.915 * sin (g*toRadians) + 0.020 * sin (2*g*toRadians)
+calcEclipticLongitude l g = l + 1.915 * sin (g*degToRad) + 0.020 * sin (2*g*degToRad)
 
 calcObliquityOfEcliptic :: Double -> Double
 calcObliquityOfEcliptic t = 23.4393 - 0.01300 * t
 
 calcEquationOfTime :: Double -> Double -> Double
-calcEquationOfTime g lambda = -1.915 * sin (g*toRadians) - 0.020 * sin (2*g*toRadians) + 2.466 * sin (2*lambda*toRadians) - 0.053 * sin (4*lambda*toRadians)
+calcEquationOfTime g lambda = -1.915 * sin (g*degToRad) - 0.020 * sin (2*g*degToRad) + 2.466 * sin (2*lambda*degToRad) - 0.053 * sin (4*lambda*degToRad)
 
 calcGreenwichHourAngle :: Double -> Double -> Double
-calcGreenwichHourAngle ut e = ut - 12 + e*toHours
+calcGreenwichHourAngle ut e = ut - 12 + e*degToHr
 
 calcDeclination :: Double -> Double -> Double
-calcDeclination epsilon lambda = toDegrees * asin (sin (epsilon*toRadians) * sin (lambda*toRadians))
+calcDeclination epsilon lambda = degToRad * asin (sin (epsilon*degToRad) * sin (lambda*degToRad))
 
+-- #################################
+-- END #############################
+-- #################################
+
+
+-- Solve this equation iteratively to find the sunrise time
 calcSunrise :: Double -> Double -> Double -> Double -> Double
-calcSunrise ut0 gha longitude tha = ut0 - (gha + toHours*longitude + tha)
+calcSunrise ut0 gha lon tha = ut0 - (gha + degToHr*lon + tha)
 
+-- Solve this equation iteratively to find the sunset time
 calcSunset :: Double -> Double -> Double -> Double -> Double
-calcSunset ut0 gha longitude tha = ut0 - (gha + toHours*longitude - tha)
+calcSunset ut0 gha lon tha = ut0 - (gha + degToHr*lon - tha)
 
+-- Calculte the hour angle at UT = 0
 calcUT0HourAngle :: Double -> Double -> Double -> Double
-calcUT0HourAngle h latitude dec
+calcUT0HourAngle h lat dec
     | tha' > 1  = 0
     | tha' < -1 = 12
-    | otherwise = toHours * toDegrees * acos tha'
+    | otherwise = degToHr * degToRad * acos tha'
     where
-        tha' = (sin (h*toRadians) - sin (latitude*toRadians) * sin (dec*toRadians)) / (cos (latitude*toRadians) * cos (dec*toRadians))
+        tha' = (sin (h*degToRad) - sin (lat*degToRad) * sin (dec*degToRad)) / (cos (lat*degToRad) * cos (dec*degToRad))
 
+-- Add whole units until a set value
 addUntil :: Double -> Double -> Double -> Double
-addUntil var ltVal untilVal = 
+addUntil var ltVal unit = 
     if var < ltVal
-        then addUntil (var + untilVal) ltVal untilVal
+        then addUntil (var + unit) ltVal unit
         else var
 
+-- Subtract whole units until a set value
 subUntil :: Double -> Double -> Double -> Double
-subUntil var gtVal untilVal = 
+subUntil var gtVal unit = 
     if var > gtVal
-        then subUntil (var - untilVal) gtVal untilVal
+        then subUntil (var - unit) gtVal unit
         else var
 
+-- Recursive solver to find the sunrise time in hours, UT
+-- If using to find the actual sunset times, convert UTC to your local timezone
 iterativeSolverSunrise :: Double -> Double -> Double -> Double -> Double -> Double
-iterativeSolverSunrise jd h ut0 latitude longitude = do
+iterativeSolverSunrise jd h ut0 lat lon = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
-    let tha = calcUT0HourAngle h latitude dec
-    let ut = calcSunrise ut0 gha longitude tha
+    let tha = calcUT0HourAngle h lat dec
+    let ut = calcSunrise ut0 gha lon tha
     let utCorr | ut < 0   = addUntil ut 0 24
                | ut > 24  = subUntil ut 24 24
                | otherwise = ut
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunrise jd h utCorr latitude longitude
+        else iterativeSolverSunrise jd h utCorr lat lon
 
+-- Recursive solver to find the sunset time in hours, UT
+-- If using to find the actual sunset times, convert UTC to your local timezone
 iterativeSolverSunset :: Double -> Double -> Double -> Double -> Double -> Double
-iterativeSolverSunset jd h ut0 latitude longitude = do
+iterativeSolverSunset jd h ut0 lat lon = do
     let tup = calcSolarGHADec jd ut0
     let gha = fst tup
     let dec = snd tup
-    let tha = calcUT0HourAngle h latitude dec
-    let ut = calcSunset ut0 gha longitude tha
+    let tha = calcUT0HourAngle h lat dec
+    let ut = calcSunset ut0 gha lon tha
     let utCorr | ut < 0   = addUntil ut 0 24
                | ut > 24  = subUntil ut 24 24
                | otherwise = ut
     let delta = ut0-utCorr
     if abs (delta) < 1e-6
         then utCorr
-        else iterativeSolverSunset jd h utCorr latitude longitude
+        else iterativeSolverSunset jd h utCorr lat lon
 
+-- Calculate the true altitude for the Sun
 calcTrueAltitude :: Double -> Double
 calcTrueAltitude h0 = -50/60 - 0.0353 * sqrt h0
 
+-- Calculate the solar Greenwich Hour Angle
 calcSolarGHADec :: Double -> Double -> (Double, Double)
 calcSolarGHADec jd ut = do
-    let t = calcNCenturies jd ut
+    let t = calcDecCenturies jd ut
     let l = calcMeanLongitude t
     let g = calcMeanAnomaly t
     let lambda = calcEclipticLongitude l g
@@ -112,32 +134,38 @@ calcSolarGHADec jd ut = do
 
     (gha, dec)
 
+-- Calculates the delta between sunrise and sunset times
 calcDeltaTime :: Double -> Double -> Double -> Double -> Double
-calcDeltaTime h latitude longitude jd = do
-    let ut0 = 12
-    let sunriseTime = iterativeSolverSunrise jd h ut0 latitude longitude
-    let sunsetTime = iterativeSolverSunset jd h ut0 latitude longitude
+calcDeltaTime h lat lon jd = do
+    let ut0 = 12 -- doesn't matter what this number is technically, but 12 is a good initial guess
+    let sunriseTime = iterativeSolverSunrise jd h ut0 lat lon
+    let sunsetTime = iterativeSolverSunset jd h ut0 lat lon
+
     sunsetTime-sunriseTime
 
+-- Calculates the derivative of a discrete array
+-- Assumes central difference
 calcDerivative :: Int -> (Double, Double) -> Double
 calcDerivative width doublet = (snd doublet - fst doublet) / (fromIntegral width)
 
+-- Helper function for calculating discrete derivatives
 extractDoublet :: [Double] -> Int -> (Double, Double)
 extractDoublet arr i = (arr!!i, arr!!(i+1))
 
 main = do
-    let stepSize = 1 
-    let jd = calcJulianDate 2021 1 1
+    let stepSize = 1  -- Units of days
+    let jd = calcJulianDay 2021 1 1
     let dates = [jd,jd+(fromIntegral stepSize)..jd+365]
 
     let h = calcTrueAltitude 0
-    let latitude = 40
-    let longitude = 0
+    let lat = 40
+    let lon = 0
 
     putStrLn "Calculating delta sunrise sunset times..."
-    let deltaTimes = map (calcDeltaTime h latitude longitude) dates
+    let deltaTimes = map (calcDeltaTime h lat lon) dates
 
     putStrLn "Calculating derivatives..."
+
     -- minus 1 for zero index and minus 1 for derivative endpoint
     let indicies = [0,stepSize..((length deltaTimes) - 1 - 1)]
     let res = map (extractDoublet deltaTimes) indicies
